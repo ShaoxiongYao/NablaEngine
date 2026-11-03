@@ -116,6 +116,10 @@ own codes by `capability.require` and by `jax_ffi.init(model=...)`, before anyth
   unit at the first identical level that can clear its L0 difference; `--full` requires every level identical.
 - `scripts/engine_check.py`: the smooth dynamics (mass matrix, bias forces) against MuJoCo C.
 - `scripts/make_mjw_reference.py`: regenerates a MuJoCo Warp reference (needs mujoco-warp 3.17.0).
+- `scripts/visualize_rollout.py`: a visual check: a 5 s open-loop rollout (squat and arm swing from a keyframe, ending
+  in a fall) by the engine and by MuJoCo C, rendered side by side into `rollout.mp4` with the qpos deviation per step
+  (float32 rounding level, 1e-7 to 2e-5 through the fall; gate `--tol`, default 1e-4) and the gradient of the final pelvis height. Needs ffmpeg and EGL (or another
+  `MUJOCO_GL`).
 - The benchmark harness (`benchmarks/README.md`) scores the forward and the gradients of every engine against the
   same truth files: `docs/results/paper_accuracy_heldout_v100.md`.
 
