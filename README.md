@@ -105,6 +105,19 @@ centre-of-mass offset `com (B, 3)` for domain randomization. Each world holds up
 rows; a world beyond them (e.g. deep interpenetration after a fall) drops the extra ones and is flagged and counted
 (`docs/api.md`, Diagnostics).
 
+## Example: trajectory optimization
+
+`examples/squat_trajopt.py` finds open-loop joint targets that make the G1 squat 15 cm and stand up again, by gradient
+descent through a 3 s rollout (`jax.grad` through `lax.scan` of `jax_ffi.step`): 400 Adam iterations, about 35 s on
+an RTX 4060 Laptop GPU. The naive targets (left) fall; the optimized ones (right) follow the reference pelvis height
+within 4 cm, and replayed open loop in float64 MuJoCo they give the same motion (qpos within 4e-5).
+
+<p align="center"><img src="docs/assets/squat_trajopt.gif" alt="Naive joint targets make the G1 fall; targets optimized with jax.grad squat and stand up" width="480"></p>
+
+```bash
+python examples/squat_trajopt.py --out runs/squat        # squat.mp4, squat.npz; --gif for the animation above
+```
+
 ## Documentation
 
 - `docs/api.md`: the JAX interface: options, gradient modes, kinematics outputs, rollouts with `lax.scan` and
