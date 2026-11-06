@@ -34,6 +34,9 @@ the engine's simulation gradients.
 NablaEngine is specialized for the Unitree G1 (the mjlab model), the first robot it supports: contacts between
 spheres, capsules and the floor, joint limits, PD position actuators, MuJoCo's Newton solver and implicitfast
 integration, in float32. Other models are rejected with an error that names the unsupported features.
+The Unitree H1 (`fixtures/h1`, converted from MuJoCo Menagerie the same way by `scripts/make_h1_model.py`) is the
+second: it is checked against float64 MuJoCo (`scripts/h1_check.py`: forward median relative error 3.6e-7, exact-mode
+gradients 1.5e-7 on contact-free states) but not yet benchmarked like the G1.
 
 Requirements: Linux x86_64, an NVIDIA GPU of compute capability 7.0 or newer (tested: V100, RTX 3090, H100, RTX PRO
 6000), Python 3.12, and a CUDA 12.x toolkit (nvcc) for the one-time build of the CUDA library (about 15 s, cached).
