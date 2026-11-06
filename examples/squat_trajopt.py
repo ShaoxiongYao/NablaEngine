@@ -1,10 +1,11 @@
-"""Trajectory optimization through the engine's gradients: open-loop PD targets that make the G1 squat and stand up
-again without falling, found by gradient descent on a loss over a whole rollout (jax.grad through lax.scan of
+"""Trajectory optimization through the engine's gradients: open-loop PD targets that make a humanoid (the G1, or
+with --robot h1 the Unitree H1) squat and stand up again without falling, found by gradient descent on a loss over a whole rollout (jax.grad through lax.scan of
 nablaengine.jax_ffi.step, the analytic adjoint of every step).
 
-The robot starts at rest at the fixtures model's knees_bent keyframe (nominal friction, no torso COM offset). The
-decision variables are the (T, 29) joint targets of T control steps of 20 ms (--steps, default 150: 3 s), as offsets
-from the naive targets: the keyframe pose with the knees, hip pitch and ankle pitch bent along the squat profile, which
+The robot starts at rest at a keyframe of its fixtures model (G1: knees_bent; H1: home, which joint PD alone does not
+hold: the H1 tips backwards; nominal friction, no torso COM offset). The decision variables are the (T, nu) joint
+targets (G1 29, H1 19) of T control steps of 20 ms (--steps, default 150: 3 s), as offsets
+from the naive targets: the keyframe pose with the knees, hip pitch and ankle (pitch) bent along the squat profile, which
 alone make the robot fall. The loss (per step, averaged over the rollout):
   pelvis height  against the reference: the keyframe height lowered by --depth (default 0.15 m) along 0.5 (1 - cos),
                  down and back up over the horizon
@@ -14,15 +15,18 @@ alone make the robot fall. The loss (per step, averaged over the rollout):
   smooth, reg    the targets' step-to-step change and their offset from the naive targets
 Adam (--iters, default 400, --lr 3e-3 with cosine decay, the gradient norm clipped at 10); the iterate with the lowest
 loss is kept (a rollout that falls is a jump of the loss: the contact sequence changes). The optimized targets are then
-replayed open loop in MuJoCo C (float64, the same substeps and Newton iteration cap) as an independent check.
+replayed open loop in MuJoCo C (float64, the same substeps and Newton iteration cap) as an independent check: the
+G1's replay stays within 4e-5 of the engine's rollout; the H1's, balanced on the edge of its heels, drifts to about
+2e-2 (float32 against float64 roundings grow in open loop) yet squats and stands the same way.
 
   source .dk_env/activate.sh
   python examples/squat_trajopt.py --out runs/squat
+  python examples/squat_trajopt.py --robot h1 --out runs/squat_h1
 
 Writes <out>/squat.npz (naive and optimized targets and rollouts, the reference, MuJoCo's replay), and unless
 --no-render <out>/squat.mp4 (left the naive targets, right the optimized ones; ffmpeg with drawtext on PATH, offscreen
-rendering, MUJOCO_GL=egl unless set) and with --gif <out>/squat.gif (smaller, for documentation). About 35 s of
-optimization on an RTX 4060 Laptop GPU.
+rendering, MUJOCO_GL=egl unless set) and with --gif <out>/squat.gif (smaller, for documentation). About 35 s (G1)
+and 26 s (H1) of optimization on an RTX 4060 Laptop GPU.
 """
 
 import argparse
@@ -43,13 +47,16 @@ import numpy as np  # noqa: E402
 from nablaengine import fixtures, jax_ffi  # noqa: E402
 
 DT = 0.02  # one control step: 4 substeps of 5 ms
-KEYFRAME = "knees_bent"
+ROBOTS = {  # fixtures directory, start keyframe, the leg joints the naive squat bends, camera (distance, look-at height)
+    "g1": dict(fixtures=fixtures.DEFAULT, keyframe="knees_bent", ankle="ankle_pitch", camera=(2.6, 0.55)),
+    "h1": dict(fixtures=fixtures.H1, keyframe="home", ankle="ankle", camera=(3.4, 0.75)),
+}
 
 
-def setup(m, steps, depth):
+def setup(m, robot, steps, depth):
     """(q0, naive targets (T, nu), lower and upper ctrlrange, reference pelvis height (T,))."""
     d = mujoco.MjData(m)
-    mujoco.mj_resetDataKeyframe(m, d, m.key(KEYFRAME).id)
+    mujoco.mj_resetDataKeyframe(m, d, m.key(robot["keyframe"]).id)
     q0 = d.qpos.copy()
     jid = m.actuator_trnid[:, 0]
     names = [m.joint(j).name for j in jid]
@@ -59,14 +66,14 @@ def setup(m, steps, depth):
     naive = np.tile(q0[m.jnt_qposadr[jid]], (steps, 1))
     naive[:, sel("knee")] += 0.7 * s
     naive[:, sel("hip_pitch")] -= 0.35 * s
-    naive[:, sel("ankle_pitch")] -= 0.35 * s
+    naive[:, sel(robot["ankle"])] -= 0.35 * s
     naive = np.clip(naive, lo, hi).astype(np.float32)
     return q0, naive, lo, hi, (q0[2] - depth * s[:, 0]).astype(np.float32)
 
 
-def optimize(m, q0, naive, lo, hi, z_ref, iters, lr):
+def optimize(m, mt, q0, naive, lo, hi, z_ref, iters, lr):
     """(rollout function: targets -> (qpos (T, nq), qvel (T, nv)), optimized targets (T, nu))."""
-    jax_ffi.init()
+    jax_ffi.init(model=m, foot_pairs=mt["foot_pairs"])
     qpos = jnp.asarray(q0[None], jnp.float32)
     zero = jnp.zeros((1, m.nv), jnp.float32)
     fric, com = jnp.ones((1,), jnp.float32), jnp.zeros((1, 3), jnp.float32)
@@ -126,14 +133,14 @@ def mujoco_replay(m, q0, u, substeps):
     return qs
 
 
-def render(m, qs_left, qs_right, labels, size, fps_out, path_mp4, path_gif=None):
+def render(m, qs_left, qs_right, labels, camera, size, fps_out, path_mp4, path_gif=None):
     """The two trajectories side by side, each half labelled: an MP4 and optionally a palette GIF at half size."""
     m.geom_rgba[m.geom_group == 3] = [0.85, 0.45, 0.15, 1.0]  # the collision geoms, hidden and translucent by default
     opt = mujoco.MjvOption()
     opt.geomgroup[3] = 1
     cam = mujoco.MjvCamera()
     cam.type = mujoco.mjtCamera.mjCAMERA_FREE
-    cam.distance, cam.elevation, cam.azimuth, cam.lookat[:] = 2.6, -10, 120, [0, 0, 0.55]
+    cam.distance, cam.elevation, cam.azimuth, cam.lookat[:] = camera[0], -10, 120, [0, 0, camera[1]]
     d = mujoco.MjData(m)
     text = ("drawtext=font=sans:text='{}':x={}+16:y=16:fontsize={}:fontcolor=white:box=1:boxcolor=black@0.5:"
             "boxborderw=8")
@@ -170,6 +177,7 @@ def summary(name, qs, q0, z_ref):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--robot", default="g1", choices=sorted(ROBOTS), help="the fixtures model (default g1)")
     ap.add_argument("--out", default="runs/squat", help="output directory")
     ap.add_argument("--steps", type=int, default=150, help="control steps of 20 ms (default 3 s)")
     ap.add_argument("--depth", type=float, default=0.15, help="squat depth of the pelvis, m")
@@ -184,9 +192,10 @@ def main():
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
 
-    m, mt = fixtures.load_model()
-    q0, naive, lo, hi, z_ref = setup(m, a.steps, a.depth)
-    rollout, u_opt = optimize(m, q0, naive, lo, hi, z_ref, a.iters, a.lr)
+    robot = ROBOTS[a.robot]
+    m, mt = fixtures.load_model(robot["fixtures"])
+    q0, naive, lo, hi, z_ref = setup(m, robot, a.steps, a.depth)
+    rollout, u_opt = optimize(m, mt, q0, naive, lo, hi, z_ref, a.iters, a.lr)
     qs_naive = np.asarray(rollout(jnp.asarray(naive))[0])
     qs_opt = np.asarray(rollout(jnp.asarray(u_opt))[0])
     m.opt.iterations = 10  # the engine's default Newton iterations per substep
@@ -200,7 +209,7 @@ def main():
              z_ref=z_ref)
 
     if not a.no_render:
-        render(m, qs_naive, qs_opt, ("naive targets", "optimized with jax.grad"), a.size, 25, out / "squat.mp4",
+        render(m, qs_naive, qs_opt, ("naive targets", "optimized with jax.grad"), robot["camera"], a.size, 25, out / "squat.mp4",
                out / "squat.gif" if a.gif else None)
         print(f"wrote {out / 'squat.mp4'}" + (f" and {out / 'squat.gif'}" if a.gif else ""))
     return 0

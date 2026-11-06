@@ -31,8 +31,26 @@ With `nv` 25 the H1 runs the engine's solves with the lanes past `NV` masked (ca
 Cholesky instead of the G1's tuned broadcast variant (H5).
 
 Joint PD alone does not keep the H1 standing: its centre of mass is about 2 cm in front of the heels at the home
-keyframe, and it tips backwards within about two seconds, as Menagerie's model does under the same gains. A demo
-that keeps it up optimizes the setpoints (`examples/squat_trajopt.py --robot h1`).
+keyframe, and it tips backwards within about two seconds, as Menagerie's model does under the same gains. `examples/squat_trajopt.py --robot h1` optimizes open-loop setpoints through the engine's gradients that keep it up
+through a 15 cm squat and back (400 Adam iterations, 26 s on an RTX 4060 Laptop GPU): pelvis height within 1.3 cm of
+the reference, tilt below 0.08 rad, 1.4 cm drift; replayed open loop in float64 MuJoCo it squats and stands the same
+way (qpos within 2e-2: on the edge of balance the float32 / float64 roundings grow).
+
+## Speed
+
+Time per 20 ms control step at the interface defaults (10 Newton iterations), JAX, on one RTX 4060 Laptop GPU (sm_89,
+nvcc 12.4), medians of 5 rounds of 50 calls; the H1 on 1024 states of `scripts/h1_check.py`'s rollouts (standing to
+lying), the G1 on `mf_s0`, tiled to B worlds:
+
+| B | H1 forward | H1 forward + VJP | G1 forward | G1 forward + VJP |
+|---|---|---|---|---|
+| 1024 | 1.47 ms | 1.98 ms | 1.86 ms | 2.71 ms |
+| 4096 | 4.81 ms (1.17 us / world) | 6.77 ms (1.65 us / world) | 7.02 ms (1.71 us / world) | 10.52 ms (2.57 us / world) |
+
+The H1 takes the register Cholesky, not the G1's tuned broadcast one, and is still faster per world (fewer dofs and
+bodies). For scale, MJX (`mujoco-mjx` 3.17.0, default options, 10 iterations, `jax.vmap` of four `mjx.step`) takes
+1347 ms (H1) and 1560 ms (G1) for the forward of 4096 worlds on the same GPU; these timings are not the paper
+benchmark's (`benchmarks/README.md`).
 
 ## How it was derived
 

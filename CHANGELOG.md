@@ -9,7 +9,7 @@
 - `nablaengine.fixtures.load_model(fixtures.H1)`: a fixtures directory holds `<prefix>_train.mjb` and
   `<prefix>_meta.json`, prefix `g1` or `h1`.
 - `scripts/visualize_rollout.py` (a visual check against MuJoCo) and `examples/squat_trajopt.py` (trajectory
-  optimization through the engine's gradients).
+  optimization through the engine's gradients; `--robot h1` for the H1).
 
 ## 0.1.0
 

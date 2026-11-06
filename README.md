@@ -119,6 +119,7 @@ within 4 cm, and replayed open loop in float64 MuJoCo they give the same motion 
 
 ```bash
 python examples/squat_trajopt.py --out runs/squat        # squat.mp4, squat.npz; --gif for the animation above
+python examples/squat_trajopt.py --robot h1 --out runs/squat_h1   # the same for the Unitree H1 (fixtures/h1)
 ```
 
 ## Documentation
