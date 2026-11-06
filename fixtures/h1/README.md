@@ -36,6 +36,11 @@ through a 15 cm squat and back (400 Adam iterations, 26 s on an RTX 4060 Laptop 
 the reference, tilt below 0.08 rad, 1.4 cm drift; replayed open loop in float64 MuJoCo it squats and stands the same
 way (qpos within 2e-2: on the edge of balance the float32 / float64 roundings grow).
 
+<p align="center"><img src="../../docs/assets/squat_trajopt_h1.png" alt="At 1.5 s the H1 under the naive setpoints lies on the floor; under the optimized setpoints it is at the bottom of the squat" width="720"></p>
+
+<sub>`examples/squat_trajopt.py --robot h1` at 1.5 s, the bottom of the squat: the naive setpoints (left) have tipped
+the H1 over, the optimized ones (right) hold it at 0.82 m pelvis height (reference 0.83 m).</sub>
+
 ## Speed
 
 Time per 20 ms control step at the interface defaults (10 Newton iterations), JAX, on one RTX 4060 Laptop GPU (sm_89,
