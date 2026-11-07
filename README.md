@@ -4,6 +4,15 @@
 
 *Pronounced "Nabla Engine".*
 
+## News
+
+- **2026-11-07, 0.2.0:** other legged robots (Unitree Go1, Go2, A1 and H1, ANYbotics ANYmal C, Boston Dynamics Spot,
+  Booster T1, ROBOTIS OP3, Berkeley Humanoid; `docs/robots.md`) and terrain: boxes, heightfields and a height scan
+  (`docs/terrain.md`). The G1's results are unchanged.
+- **2026-10-31, 0.1.0:** first release: the Unitree G1.
+
+All release notes: [Releases](https://github.com/sailab-ai/NablaEngine/releases), [`CHANGELOG.md`](CHANGELOG.md).
+
 <p align="center"><img src="docs/assets/speed_fwd.png" alt="Forward step: NablaEngine 1.21 ms per control step, against MuJoCo Warp, Genesis, Isaac Lab, MJX and MuJoCo C" width="820"></p>
 <p align="center"><img src="docs/assets/speed_bwd.png" alt="A step and its gradient: NablaEngine 1.78 ms, MuJoCo Warp with its adjoint pull request 20.5 ms" width="820"></p>
 <p align="center"><img src="docs/assets/speed_ppo.png" alt="Time per PPO iteration: NablaEngine 0.123 s, MuJoCo Warp 0.355 s" width="820"></p>
